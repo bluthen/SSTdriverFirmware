@@ -7,7 +7,7 @@
 #include "sst_console.h"
 #include "stepper_drivers.h"
 
-const char* sstversion = "v1.1.0";
+const char* sstversion = "v1.1.1";
 
 
 // Default constant EEPROM values
@@ -142,6 +142,7 @@ void sst_reset()
   time_adjust_s = 0;
   setPosition(0);
   if(sstvars.resetMove > d_initial) {
+    //TODO: Why is loop needed? Also because of loop a serial command can go before sst_mv, fix.
     loop();
     sst_mv(sstvars.resetMove);
   }
