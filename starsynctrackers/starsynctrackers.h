@@ -19,6 +19,8 @@ struct SSTVARS {
   uint8_t resetAtEnd;
   float resetMove;
   float dir;
+  uint8_t autoguide;
+  float guideRate;
 };
 
 /**
@@ -61,6 +63,18 @@ float sst_theta(float time_solar_s);
  * @return Rod length.
  */
 float sst_rod_length_by_angle(float theta);
+
+/**
+ * Set rate multiplier.
+ * @param rate multiplier rate
+ */
+void sst_set_rate(float rate);
+
+/**
+ * Get multiplier rate.
+ * @return The multiplier rate value;
+ */
+float sst_get_rate();
 
 /**
  * Inverse of tracker_calc_steps, gives you time given tracker steps.

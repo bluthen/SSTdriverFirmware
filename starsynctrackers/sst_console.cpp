@@ -118,12 +118,7 @@ void sst_console_set_rate() {
     Serial.println(F("ERROR: Invalid argument given to 'set_rate'"));
   } else {
     rate = atof(arg);
-    sst_rate = rate;
-    time_adjust_s = steps_to_time_solar(getPosition()) - ((float)(millis() - time_solar_start_ms))/1000.0;
-    time_solar_last_s = -9999;
-    if(sst_debug) {
-      Serial.println(time_adjust_s);
-    }
+    sst_set_rate(rate);
 
     Serial.print(F("Rate set to "));
     Serial.println(rate); 
@@ -193,6 +188,10 @@ void sst_console_set_var() {
     sstvars.resetMove = value;
   } else if(strcmp_P(argVarName, PSTR("dir")) == 0) {
     sstvars.dir = value;
+  } else if(strcmp_P(argVarName, PSTR("autoguide")) == 0) {
+    sstvars.autoguide = ivalue;
+  } else if(strcmp_P(argVarName, PSTR("guideRate")) == 0) {
+    sstvars.guideRate = value;
   } else {
     updated = false;
     Serial.print("ERROR: Invalid variable name '");
@@ -216,25 +215,30 @@ void sst_console_status() {
   Serial.println();
   Serial.println(F("EEPROM Values:"));
   Serial.print(F(" stepsPerRotation="));
-  Serial.println(sstvars.stepsPerRotation);
+  Serial.println(sstvars.stepsPerRotation, 5);
   Serial.print(F(" threadsPerInch="));
-  Serial.println(sstvars.threadsPerInch);
+  Serial.println(sstvars.threadsPerInch, 5);
   Serial.print(F(" r_i="));
-  Serial.println(sstvars.r_i);
+  Serial.println(sstvars.r_i, 5);
   Serial.print(F(" d_s="));
-  Serial.println(sstvars.d_s);
+  Serial.println(sstvars.d_s, 5);
   Serial.print(F(" d_f="));
-  Serial.println(sstvars.d_f);
+  Serial.println(sstvars.d_f, 5);
   Serial.print(F(" recalcIntervalS="));
-  Serial.println(sstvars.recalcIntervalS);
+  Serial.println(sstvars.recalcIntervalS, 5);
   Serial.print(F(" endLengthReset="));
-  Serial.println(sstvars.endLengthReset);
+  Serial.println(sstvars.endLengthReset, 5);
   Serial.print(F(" resetAtEnd="));
   Serial.println(sstvars.resetAtEnd);
   Serial.print(F(" resetMove="));
-  Serial.println(sstvars.resetMove);
+  Serial.println(sstvars.resetMove, 5);
   Serial.print(F(" dir="));
   Serial.println(sstvars.dir);
+  Serial.print(F(" autoguide="));
+  Serial.println(sstvars.autoguide);
+  Serial.print(F(" guideRate="));
+  Serial.println(sstvars.guideRate, 5);
+
   Serial.println(F("Runtime Status:"));
   if (sst_debug) {
     Serial.println(F(" Debug: Enabled"));
@@ -296,4 +300,3 @@ void sst_console_init() {
 void sst_console_read_serial() {
   sSSTCmd.readSerial();
 }
-

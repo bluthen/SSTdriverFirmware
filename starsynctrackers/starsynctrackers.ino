@@ -7,25 +7,42 @@
 #include "sst_console.h"
 #include "stepper_drivers.h"
 
-const char* sstversion = "v1.1.1";
+const char* sstversion = "v1.2.0";
 
 
 // Default constant EEPROM values
-static const uint16_t EEPROM_MAGIC = 0x0103;
+static const uint16_t EEPROM_MAGIC = 0x0104;
 static const float STEPS_PER_ROTATION = 200.0; // Steps per rotation, just steps not microsteps.
 static const float THREADS_PER_INCH = 20;  // Threads per inch or unit of measurement
-static const float R_I = 7.3975;     // Distance from plate pivot to rod when rod is perp from plate // Russ: 7.28
-static const float D_S = 0.00591;   // Distance from rod pivot to plate
-static const float D_F = 0.446; // Distiance along rod from plate to starting position // Russ: 0.432
+static const float R_I = 7.3975;     // Distance from plate pivot to rod when rod is perp from plate
+static const float D_S = 0.375;   // Distance from rod pivot to center of top plate if plates together
+static const float D_F = 0.446; // Distiance perpendicular to bottom plate to center of top plate at starting position
 static const float RECALC_INTERVAL_S = 15; // Time in seconds between recalculating
-static const float END_LENGTH_RESET = 6.500; // Length to travel before reseting.
+static const float END_LENGTH_RESET = 6.05; // Length to travel before reseting.
 static const uint8_t RESET_AT_END = 0;
 static const float DIRECTION = 1.0; // 1 forward is forward; -1 + is forward is backward
 static const float RESET_MOVE = -1;
+static const uint8_t AUTOGUIDE = 0.0;
+static const float GUIDERATE = 4.0;
 
 static const int STOP_ANALOG_POWER_PIN = A3; //Pins stop switch toggles power to proximity switch.
 static const int STOP_ANALOG_POWER_STOP_VALUE = 990; // 0 - 1023 (0 closer, 1023 farther)
 static const int STOP_BUTTON_PIN = A2;
+
+const static int AUTOGUIDE_RA_NEGX_PIN = 13;
+const static int AUTOGUIDE_RA_POSX_PIN = 12;
+
+static const uint8_t AG_NEGX_MASK = 0;
+static const uint8_t AG_POSX_MASK = 1;
+
+static boolean ra_autoguiding;
+static float prevRASpeed;
+static uint8_t status = 0;
+static uint8_t debounce_status=255;
+static uint8_t prev_status=255;
+static unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
+
 
 boolean keep_running = true;
 float sst_rate = 1.0;
@@ -75,6 +92,8 @@ static void sst_eeprom_init() {
     sstvars.resetAtEnd = RESET_AT_END;
     sstvars.resetMove = RESET_MOVE;
     sstvars.dir = DIRECTION;
+    sstvars.autoguide = AUTOGUIDE;
+    sstvars.guideRate = GUIDERATE;
     sst_save_sstvars();
   } else {
     //Read in from EEPROM
@@ -86,6 +105,78 @@ static void sst_eeprom_init() {
 void sst_save_sstvars() {
     EEPROM.put(sizeof(uint16_t), sstvars); 
 }
+
+
+void autoguide_init()
+{
+  pinMode(AUTOGUIDE_RA_NEGX_PIN, INPUT);
+  digitalWrite(AUTOGUIDE_RA_NEGX_PIN, HIGH);
+  pinMode(AUTOGUIDE_RA_POSX_PIN, INPUT);
+  digitalWrite(AUTOGUIDE_RA_POSX_PIN, HIGH);  
+}
+
+void autoguide_read() {
+  status = digitalRead(AUTOGUIDE_RA_NEGX_PIN) << AG_NEGX_MASK;
+  status |= digitalRead(AUTOGUIDE_RA_POSX_PIN) << AG_POSX_MASK;  
+}
+
+
+
+void autoguide_run()
+{
+  if(!sstvars.autoguide) {
+    return;
+  }
+
+  autoguide_read();
+  //If change
+  if(status != debounce_status) {
+    debounce_status = status;
+    lastDebounceTime = millis();
+  }
+  
+  if (status != prev_status && (millis() - lastDebounceTime) > debounceDelay) {
+    if(sst_debug) {
+      Serial.print("status != prev_status and debounced: ");
+      Serial.println(status);
+    }
+
+    // Low means pressed except for rate switch
+    
+    prev_status = status;
+
+    if(!(status & (1 << AG_POSX_MASK))) {
+      if(!ra_autoguiding) {
+        prevRASpeed = sst_get_rate();
+        ra_autoguiding = true;
+      }
+      sst_set_rate(prevRASpeed + sstvars.guideRate);        
+      if(sst_debug) {
+        Serial.println(F("RA Right "));
+      }
+
+    } else if(!(status & (1 << AG_NEGX_MASK))) {
+      if(!ra_autoguiding) {
+        ra_autoguiding = true;
+        prevRASpeed = sst_get_rate();
+      }
+      sst_set_rate(prevRASpeed - sstvars.guideRate);
+      if(sst_debug) {
+        Serial.println(F("RA Left"));
+      }
+    } else {
+      if(ra_autoguiding) {
+        sst_set_rate(prevRASpeed);
+        ra_autoguiding = false;
+        prevRASpeed = 0.0;
+      }
+      if(sst_debug) {
+        Serial.println(F("Guide stop"));
+      }
+    }
+  }
+}
+
 
 /**
  * When first powered up. sets up serial, sstvars, stepper, console, resets tracker.
@@ -101,6 +192,9 @@ void setup()
   pinMode(STOP_ANALOG_POWER_PIN, OUTPUT);
 
   stepperInit();
+  if (sstvars.autoguide) {
+    autoguide_init();
+  }
   sst_console_init();
   sst_reset();
 }
@@ -149,6 +243,23 @@ void sst_reset()
   if (sst_debug) {
     Serial.println(F("sst_reset end"));
   }
+}
+
+
+void sst_set_rate(float rate) {
+  sst_rate = rate;
+  time_adjust_s = steps_to_time_solar(getPosition()) - ((float)(millis() - time_solar_start_ms))/1000.0;
+  time_solar_last_s = -9999;
+  if(sst_debug) {
+    Serial.print(F("sst_set_rate: "));
+    Serial.print(rate);
+    Serial.print(", ");
+    Serial.println(time_adjust_s);
+  }  
+}
+
+float sst_get_rate() {
+  return sst_rate;
 }
 
 // See starsynctrackers.h
@@ -263,6 +374,7 @@ void loop()
   if (!keep_running) {
     delay(10);
   } else {  
+    autoguide_run();
     if (time_diff_s >= RECALC_INTERVAL_S) {
       time_solar_last_s = time_solar_s;
       if(sst_debug) {
@@ -285,4 +397,3 @@ void loop()
   }
   sst_console_read_serial();
 }
-
