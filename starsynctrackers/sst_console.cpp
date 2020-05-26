@@ -231,13 +231,13 @@ void sst_console_status() {
   Serial.print(F(" resetAtEnd="));
   Serial.println(sstvars.resetAtEnd);
   Serial.print(F(" resetMove="));
-  Serial.println(sstvars.resetMove, 5);
+  Serial.println(sstvars.resetMove);
   Serial.print(F(" dir="));
   Serial.println(sstvars.dir);
   Serial.print(F(" autoguide="));
   Serial.println(sstvars.autoguide);
   Serial.print(F(" guideRate="));
-  Serial.println(sstvars.guideRate, 5);
+  Serial.println(sstvars.guideRate);
 
   Serial.println(F("Runtime Status:"));
   if (sst_debug) {
