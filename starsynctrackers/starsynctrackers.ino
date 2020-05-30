@@ -16,7 +16,7 @@ static const float STEPS_PER_ROTATION = 200.0; // Steps per rotation, just steps
 static const float THREADS_PER_INCH = 20;  // Threads per inch or unit of measurement
 static const float R_I = 7.3975;     // Distance from plate pivot to rod when rod is perp from plate
 static const float D_S = 0.375;   // Distance from rod pivot to center of top plate if plates together
-static const float D_F = 0.446; // Distiance perpendicular to bottom plate to center of top plate at starting position
+static const float L_R = 1.6; // Length between pivot points at start position
 static const float RECALC_INTERVAL_S = 15; // Time in seconds between recalculating
 static const float END_LENGTH_RESET = 6.05; // Length to travel before reseting.
 static const uint8_t RESET_AT_END = 0;
@@ -86,7 +86,7 @@ static void sst_eeprom_init() {
     sstvars.threadsPerInch = THREADS_PER_INCH;
     sstvars.r_i = R_I;
     sstvars.d_s = D_S;
-    sstvars.d_f = D_F;
+    sstvars.l_r = L_R;
     sstvars.recalcIntervalS = RECALC_INTERVAL_S;
     sstvars.endLengthReset = END_LENGTH_RESET;
     sstvars.resetAtEnd = RESET_AT_END;
@@ -231,7 +231,7 @@ void sst_reset()
   delay(1000);
   time_solar_start_ms = 0;
   time_solar_last_s = -sstvars.recalcIntervalS;
-  theta_initial = atan(sstvars.d_f/sstvars.r_i);
+  theta_initial = sst_angle_by_rod_length(sstvars.l_r);
   d_initial = sst_rod_length_by_angle(theta_initial);
   time_adjust_s = 0;
   setPosition(0);
@@ -264,12 +264,25 @@ float sst_get_rate() {
 
 // See starsynctrackers.h
 float sst_rod_length_by_angle(float theta) {
-  float psi, r, d;
-  
-  psi = 0.5*(PI - theta);
-  r = sstvars.r_i - sstvars.d_s * tan(PI / 2.0 - psi); //Calculated adjusted length from pivot to center of rod
-  d = r * sin(theta) / sin(psi); //Calculates desired length of rod between plates.
-  return d;
+  return (sstvars.r_i*sin(theta) + sstvars.d_s)/cos(0.5*theta);
+}
+
+static float sst_angle_by_rod_length(float l) {
+  //Secant method
+  //http://www.codewithc.com/c-program-for-secant-method/
+  float a = 10.0;
+  float b = 0;
+  float c = 0;
+  float fa = 0;
+  float fb = 0;
+  do {
+    fb = sst_rod_length_by_angle(b) - l;
+    fa = sst_rod_length_by_angle(a) - l;
+    c = (a*fb - b*fa)/(fb-fa);
+    a = b;
+    b = c;
+  } while(fabs(sst_rod_length_by_angle(c) - l) > 0.00001);
+  return c;
 }
 
 // See starsynctrackers.h

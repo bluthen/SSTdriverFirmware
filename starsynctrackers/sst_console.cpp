@@ -176,8 +176,8 @@ void sst_console_set_var() {
     sstvars.r_i = value;
   } else if(strcmp_P(argVarName, PSTR("d_s")) == 0) {
     sstvars.d_s = value;
-  } else if(strcmp_P(argVarName, PSTR("d_f")) == 0) {
-    sstvars.d_f = value;
+  } else if(strcmp_P(argVarName, PSTR("l_r")) == 0) {
+    sstvars.l_r = value;
   } else if(strcmp_P(argVarName, PSTR("recalcIntervalS")) == 0) {
     sstvars.recalcIntervalS = value;
   } else if(strcmp_P(argVarName, PSTR("endLengthReset")) == 0) {
@@ -222,8 +222,8 @@ void sst_console_status() {
   Serial.println(sstvars.r_i, 5);
   Serial.print(F(" d_s="));
   Serial.println(sstvars.d_s, 5);
-  Serial.print(F(" d_f="));
-  Serial.println(sstvars.d_f, 5);
+  Serial.print(F(" l_r="));
+  Serial.println(sstvars.l_r, 5);
   Serial.print(F(" recalcIntervalS="));
   Serial.println(sstvars.recalcIntervalS, 5);
   Serial.print(F(" endLengthReset="));

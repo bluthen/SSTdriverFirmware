@@ -13,7 +13,7 @@ struct SSTVARS {
   float threadsPerInch;
   float r_i;
   float d_s;
-  float d_f;
+  float l_r;
   float recalcIntervalS;
   float endLengthReset;
   uint8_t resetAtEnd;
@@ -63,6 +63,13 @@ float sst_theta(float time_solar_s);
  * @return Rod length.
  */
 float sst_rod_length_by_angle(float theta);
+
+/**
+ * Calculates theta based on rod length.
+ * @params l rod length
+ * @returns theta angle of tracker if rod is length l
+ */
+static float sst_angle_by_rod_length(float l);
 
 /**
  * Set rate multiplier.
