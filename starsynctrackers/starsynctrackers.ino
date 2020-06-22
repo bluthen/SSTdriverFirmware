@@ -7,7 +7,7 @@
 #include "sst_console.h"
 #include "stepper_drivers.h"
 
-const char* sstversion = "v1.2.0";
+const char* sstversion = "v1.3.0";
 
 
 // Default constant EEPROM values
@@ -24,6 +24,7 @@ static const float DIRECTION = 1.0; // 1 forward is forward; -1 + is forward is 
 static const float RESET_MOVE = -1;
 static const uint8_t AUTOGUIDE = 0.0;
 static const float GUIDERATE = 4.0;
+static const float CALSTEPSIZE = 0.35;
 
 static const int STOP_ANALOG_POWER_PIN = A3; //Pins stop switch toggles power to proximity switch.
 static const int STOP_ANALOG_POWER_STOP_VALUE = 990; // 0 - 1023 (0 closer, 1023 farther)
@@ -46,6 +47,7 @@ unsigned long debounceDelay = 50;
 
 boolean keep_running = true;
 float sst_rate = 1.0;
+float cal_rate = 1.0;
 int sst_reset_count = 0;
 SSTVARS sstvars;
 float time_diff_s = 0;
@@ -61,6 +63,7 @@ static float d_initial;
 static void sst_eeprom_init(void);
 static float tracker_calc_steps(float time_solar_s);
 static void check_end(float current_steps);
+static void rate_change_cleanup();
 
 
 void stop_button_analog_power(boolean powered) {
@@ -78,6 +81,7 @@ void stop_button_analog_power(boolean powered) {
 static void sst_eeprom_init() {
   //Since arduino doesn't load eeprom set with EEMEM, do our own init.
   uint16_t magic;
+  uint8_t i;
   EEPROM.get(0, magic);
   if (magic != EEPROM_MAGIC) {
     //Initial EEPROM
@@ -94,6 +98,10 @@ static void sst_eeprom_init() {
     sstvars.dir = DIRECTION;
     sstvars.autoguide = AUTOGUIDE;
     sstvars.guideRate = GUIDERATE;
+    sstvars.calStepSize = CALSTEPSIZE;
+    for(i = 0; i < MAX_CALIBRATE_SIZE; i++){
+      sstvars.calibrate[i] = 1.0;
+    }
     sst_save_sstvars();
   } else {
     //Read in from EEPROM
@@ -245,17 +253,21 @@ void sst_reset()
   }
 }
 
+void rate_change_cleanup() {
+  time_adjust_s = steps_to_time_solar(getPosition()) - ((float)(millis() - time_solar_start_ms))/1000.0;
+  time_solar_last_s = -9999;
+}
+
 
 void sst_set_rate(float rate) {
   sst_rate = rate;
-  time_adjust_s = steps_to_time_solar(getPosition()) - ((float)(millis() - time_solar_start_ms))/1000.0;
-  time_solar_last_s = -9999;
+  rate_change_cleanup();
   if(sst_debug) {
     Serial.print(F("sst_set_rate: "));
     Serial.print(rate);
     Serial.print(", ");
     Serial.println(time_adjust_s);
-  }  
+  }    
 }
 
 float sst_get_rate() {
@@ -289,7 +301,7 @@ static float sst_angle_by_rod_length(float l) {
 float sst_theta(float time_solar_s) {
   float time_sidereal_s;
   
-  time_sidereal_s = sst_rate*time_solar_s * 1.0027379;  //Calculates sidereal time from solar time.
+  time_sidereal_s = cal_rate*sst_rate*time_solar_s * 1.0027379;  //Calculates sidereal time from solar time.
   return (theta_initial + 0.25 * PI * time_sidereal_s / 10800.0); //Calculates desired plate pivot angle
 }
 
@@ -369,6 +381,40 @@ static void check_end(float current_steps) {
   }
 }
 
+static bool update_cal_rate() {
+  uint8_t i;
+  float c_i, c_j;
+  float l = sst_rod_length_by_steps(getPosition());
+  float start_cal_rate = cal_rate;
+  float fj = l/sstvars.calStepSize;
+  i = (int)(fj);
+  if(i >= MAX_CALIBRATE_SIZE-1) {
+    i = MAX_CALIBRATE_SIZE-1;
+    cal_rate = sstvars.calibrate[i];
+    if(cal_rate != start_cal_rate) {
+      rate_change_cleanup();
+      return true;
+    }
+  } else {
+    c_i = sstvars.calibrate[i];
+    c_j = sstvars.calibrate[i+1];
+    cal_rate = c_i + (c_j-c_i) * (fj - i);
+    if(sst_debug) {
+      Serial.print("c_i =");
+      Serial.println(c_i, 3);
+      Serial.print("c_j =");
+      Serial.println(c_j, 3);
+      Serial.print("cal_rate =");
+      Serial.println(cal_rate, 3);
+    }
+    if(cal_rate != start_cal_rate) {
+      rate_change_cleanup();
+      return true;
+    }
+  }  
+  return false;
+}
+
 static int loop_count = 0;
 /**
  * Program loop.
@@ -389,6 +435,9 @@ void loop()
   } else {  
     autoguide_run();
     if (time_diff_s >= RECALC_INTERVAL_S) {
+      if(update_cal_rate()) {
+        time_solar_s = ((float)(millis() - time_solar_start_ms))/1000.0 + time_adjust_s;  
+      }
       time_solar_last_s = time_solar_s;
       if(sst_debug) {
         Serial.print(tracker_calc_steps(time_solar_s));

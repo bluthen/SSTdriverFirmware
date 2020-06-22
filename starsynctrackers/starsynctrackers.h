@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <stdint.h>
 
+#define MAX_CALIBRATE_SIZE 20
 
 /** 
  * Structure that holds EEPROM values. The default values are in starsynctrackers.ino
@@ -21,6 +22,8 @@ struct SSTVARS {
   float dir;
   uint8_t autoguide;
   float guideRate;
+  float calStepSize;
+  float calibrate[MAX_CALIBRATE_SIZE];
 };
 
 /**

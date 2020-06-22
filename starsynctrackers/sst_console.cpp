@@ -192,6 +192,20 @@ void sst_console_set_var() {
     sstvars.autoguide = ivalue;
   } else if(strcmp_P(argVarName, PSTR("guideRate")) == 0) {
     sstvars.guideRate = value;
+  } else if(strcmp_P(argVarName, PSTR("calStepSize")) == 0) {
+    sstvars.calStepSize = value;
+  } else if(strcmp_P(argVarName, PSTR("calValue")) == 0) {
+    if (ivalue >= MAX_CALIBRATE_SIZE) {
+      Serial.println(F("ERROR: invalid index for: set_var calValue [index] [value]"));
+      return;      
+    }
+    argValue = sSSTCmd.next();
+    if (argValue == NULL) {
+      Serial.println(F("ERROR: Missing [value2] argument in set_Var calValue."));
+      return;
+    }
+    value = atof(argValue);
+    sstvars.calibrate[ivalue] = value;
   } else {
     updated = false;
     Serial.print("ERROR: Invalid variable name '");
@@ -211,6 +225,7 @@ void sst_console_set_var() {
 void sst_console_status() {
   float theta, t;
   float l;
+  uint8_t i;
 
   Serial.println();
   Serial.println(F("EEPROM Values:"));
@@ -238,6 +253,15 @@ void sst_console_status() {
   Serial.println(sstvars.autoguide);
   Serial.print(F(" guideRate="));
   Serial.println(sstvars.guideRate, 5);
+  Serial.print(F(" calStepSize="));
+  Serial.println(sstvars.calStepSize, 5);
+  Serial.println(F(" calValue [index] = "));
+  for(i = 0; i < MAX_CALIBRATE_SIZE; i++) {
+    Serial.print(F("  "));
+    Serial.print(i);
+    Serial.print(F(": "));
+    Serial.println(sstvars.calibrate[i], 5);
+  }
 
   Serial.println(F("Runtime Status:"));
   if (sst_debug) {
@@ -270,6 +294,15 @@ void sst_console_status() {
   Serial.print(F("$ "));
 }
 
+void sst_console_qlr() {
+  float l = sst_rod_length_by_steps(getPosition());
+  Serial.print(F(" Length: "));
+  Serial.println(l, 5);
+
+  Serial.print(F("$ "));
+
+}
+
 void sst_console_help(const char* cmd) {
   Serial.println(F("SST Commands:"));
   Serial.println(F(" reset                            Reset the tracker to starting position."));
@@ -280,6 +313,7 @@ void sst_console_help(const char* cmd) {
   Serial.println(F(" set_debug 0|1                    0 debug output disable, 1 debug output enabled."));
   Serial.println(F(" set_var [variable_name] [value]  Sets eeprom calibration variable."));
   Serial.println(F(" status                           Shows tracker status and eeprom variable values."));
+  Serial.println(F(" qlr                              Quick calculated rod length."));
   Serial.println("");
   Serial.print(F("$ "));
 }
@@ -293,6 +327,7 @@ void sst_console_init() {
   sSSTCmd.addCommand("set_debug", sst_console_set_debug);
   sSSTCmd.addCommand("set_var", sst_console_set_var);
   sSSTCmd.addCommand("status", sst_console_status);
+  sSSTCmd.addCommand("qlr", sst_console_qlr);
   sSSTCmd.setDefaultHandler(sst_console_help); // Help   
   Serial.print(F("$ "));
 }
