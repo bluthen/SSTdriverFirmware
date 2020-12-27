@@ -7,7 +7,7 @@
 #include "sst_console.h"
 #include "stepper_drivers.h"
 
-const char* sstversion = "v1.3.0";
+const char* sstversion = "v1.4.0";
 
 
 // Default constant EEPROM values
